@@ -185,19 +185,34 @@ rtfDictionary = many1 stenoEntry
 -- scans header content, doesn't use it
 dictionaryFile :: Parser [Brief]
 dictionaryFile = (rtfGroup False "rtf1" $
-                 manyTill anyChar stenoEntry *> rtfDictionary) <* spaces <* endOfInput
+                 manyTill anyChar stenoEntry *> rtfDictionary) <* skipSpace <* endOfInput
 
--- -- I think using aeson would just make this more complex
--- toJSON :: [Brief] -> Text
--- toJSON xs = '{':(briefs xs) where
---   briefs (x:xs) = (br x) ++ (briefs xs)
---   briefs [] = "}\n"
---   br (Brief stks trn) = (quoteS stks) ++ ": " ++ concatMap translation trn ++ ",\n"
---   quoteS stks = "\"" ++ (concat $ intersperse "/" $ map hyphenate stks) ++ "\""
---   hyphenate (Stroke l r) = l ++ "-" ++ r  -- always inserts hyphen
---   translation (PlainText s) = "\"" ++ s ++ "\""
---   translation (Fingerspell s) = "\"{&" ++ s ++ "\""
---   translation (Punctuation s) = "\"" ++ s ++ "\""
+--I think using aeson would just make this more complex
+toJSON :: [Brief] -> Text
+toJSON xs = T.concat ["{\n", T.concat $ map brief xs, "}\n"] where
+  brief (Brief stks trn) = T.concat [quoteS stks,  ": ",  T.concat $ map translation trn,  ",\n"]
+  quoteS stks = T.concat ["\"", T.intercalate "/" $ map hyphenate stks,  "\""]
+  hyphenate (Stroke l r) = T.concat [l,  "-",  r]  -- always inserts hyphen
+  translation (PlainText s) = T.concat ["\"",  s,  "\""]
+  translation (Fingerspell s) = T.concat ["\"{&",  s,  "\""]
+  translation (Punctuation s) = T.concat ["\"",  s,  "\""]
 
+isRight :: Either a b -> Bool
 isRight (Left _) = False
 isRight (Right _) = True
+
+-- file handling section
+jsonExtension :: String -> String
+jsonExtension fn = if isSuffixOf ".rtf" fn
+                   then (reverse . (drop 4) . reverse) fn ++ ".json"
+                   else fn ++ ".json"
+
+main :: IO ()
+main = do
+  let filename = "ploverdicts/mk-test.rtf"
+  bs <- BS.readFile filename
+  let utf = decodeUtf8With lenientDecode bs
+  case parse dictionaryFile utf of
+       (Done _ r) -> T.writeFile (jsonExtension filename) (toJSON r)
+       (Fail _ c e) -> putStrLn e
+       (Partial _) -> putStrLn "Don't know how to get more data for parser"
