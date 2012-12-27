@@ -145,10 +145,9 @@ bareGroup = try $ betweenBraces rtfLiteral
 unknown :: Parser Translation
 -- Calling at the end of translation ensures we don't take any known translation term
 -- notFollowedBy ensures we don't take the stenoGroup
-unknown = Unknown <$> rejectIf (isRight . (parseOnly stenoGroup))
-          (bareGroup <|>
-           anyGroup <|>
-           anyCmd )
+unknown = Unknown <$> (bareGroup <|>
+                       anyGroup <|>
+                       anyCmd )
 
 translation :: Parser [Translation]
 translation = many1 (
