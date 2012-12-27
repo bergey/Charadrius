@@ -2,25 +2,28 @@
 import Prelude hiding (takeWhile)
 import Data.Attoparsec.Text
 import Control.Applicative
-import Data.List (intersperse)
+import Data.List (intersperse, isSuffixOf)
 import Control.Monad
 import Data.Monoid (mconcat, mappend)
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import Data.Text (Text)
 import Data.Text.Encoding
 import qualified Data.ByteString as BS
-import Data.Char (isAlpha, isDigit)
+import Data.Char (isAlpha, isDigit, isSpace)
 import Data.Text.Encoding.Error (lenientDecode)
 
+(*>|) :: Applicative f => f a -> b -> f b
 (*>|) a b  = a *> (pure b)
 
 rejectIf :: (a -> Bool) -> Parser a -> Parser a
-rejectIf pred pars = do
+rejectIf predicate pars = do
   res <- pars
-  if pred res
+  if predicate res
      then empty
     else return res
 
+betweenBraces :: Parser a -> Parser a
 betweenBraces p = char '{' *> p <* char '}'
 
 -- another function from Parsec not included in attoparsec
@@ -34,6 +37,7 @@ optionMaybe p = Just <$> p <|> pure Nothing
 --   uppercase c = (c >= 65) && (c <= 90)
 --   lowercase c = (c >= 97) && (c <= 122)
 
+isAlphaNum :: Char -> Bool
 isAlphaNum c = isAlpha c || isDigit c
 
 notFollowedBy :: (Char -> Bool) -> Parser ()
@@ -56,15 +60,20 @@ rtfGroup :: Bool -> T.Text -> Parser a -> Parser a
 rtfGroup h s p = try $ betweenBraces (hiddenGroupPrefix h *> rtfCmd s *> p)
 
 -- accept the payload of the group, assuming no nested groups or control words
-rtfLiteral = takeWhile $ notInClass "{}\\\n\r"
+rtfLiteral :: Parser Text
+rtfLiteral = takeWhile1 $ notInClass "{}\\\n\r"
 
 -- strictly speaking, command words are different from command characters
 -- this parser does both, and can also be used to parse things that
 -- RTF disallows, like \:magic:
-rtfCmd s = try $ char '\\' *> string s <* notFollowedBy isAlphaNum <* many space
+rtfCmd :: Text -> Parser Text
+rtfCmd s = try $ char '\\' *> string s <* notFollowedBy isAlphaNum <* skipWhile hSpace where
+  hSpace c = isSpace c && c /= '\n' && c /= '\r'
 
 -- when the command begins with something other than alphaNum
 -- it's one character long, and dosen't need space to delimit the end
+
+rtfCmdChar :: Char -> Parser Char
 rtfCmdChar c = try $ char '\\' *> char c
 
 skipRTF :: Parser ()
@@ -72,13 +81,14 @@ skipRTF = anyRTF *> empty
 
 -- even accepts baregroups, so that the nested anyRTF will do so
 --anyGroup :: Parser Text
-anyGroup = mconcat <$> sequence [string "{", option "" (string "\\"), option "" (string "*\\"), takeWhile isAlphaNum, mconcat <$> many anyRTF, string "}"]
+anyGroup :: Parser Text
+anyGroup = T.concat <$> sequence [string "{", option "" (string "\\"), option "" (string "*\\"), takeWhile isAlphaNum, mconcat <$> many anyRTF, string "}"]
 
 anyCmd :: Parser Text
 anyCmd = liftA2 mappend (string "\\") (takeWhile isAlphaNum)
 
 anyRTF :: Parser Text
-anyRTF = anyGroup <|> anyCmd <|> rtfLiteral <|> bareGroup <|> spaces
+anyRTF = anyGroup <|> anyCmd <|> rtfLiteral <|> bareGroup
 
 -- Stroke left-hand-keys right-hand-keys
 data Stroke = Stroke Text Text | Junk Text
@@ -126,7 +136,8 @@ par :: Parser Translation
 par = (rtfCmd "par") *> (NewPar <$> optionMaybe newstyle) where
   newstyle = string "\\s" *> decimal
 
-knownCharGroups =   CharGroup <$> (try $ betweenBraces $ satisfy $ inClass "'$|")
+knownCharGroups :: Parser Translation
+knownCharGroups =  CharGroup <$> (try $ betweenBraces $ satisfy $ inClass "'$|")
 
 bareGroup :: Parser Text
 bareGroup = try $ betweenBraces rtfLiteral
@@ -154,7 +165,7 @@ translation = many1 (
               rtfCmd "cxfc" *>| CapNext <|>
               ignored <|>
               unknown -- must come last
-              )
+              ) <* skipSpace
 
 stenoEntry :: Parser Brief
 stenoEntry = liftA2 Brief stenoGroup translation
