@@ -15,26 +15,12 @@ import Types
 (*>|) :: Applicative f => f a -> b -> f b
 (*>|) a b  = a *> (pure b)
 
-rejectIf :: (a -> Bool) -> Parser a -> Parser a
-rejectIf predicate pars = do
-  res <- pars
-  if predicate res
-     then empty
-    else return res
-
 betweenBraces :: Parser a -> Parser a
 betweenBraces p = char '{' *> p <* char '}'
 
 -- another function from Parsec not included in attoparsec
 optionMaybe :: Parser a -> Parser (Maybe a)
 optionMaybe p = Just <$> p <|> pure Nothing
-
--- notFollowedBy :: Parser a -> Parser ()
--- notFollowedBy p = lookahead p *>| () <|> empty
-
--- isAlpha_ascii_w8 c = uppercase c || lowercase c where
---   uppercase c = (c >= 65) && (c <= 90)
---   lowercase c = (c >= 97) && (c <= 122)
 
 isAlphaNum :: Char -> Bool
 isAlphaNum c = isAlpha c || isDigit c

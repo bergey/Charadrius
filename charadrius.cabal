@@ -16,9 +16,10 @@ cabal-version: >= 1.2.1
 build-type:    Simple
 
 executable charadrius
-        main-is: charadrius.hs
-        other-modules: Types, Parser, Plover
-        build-depends: attoparsec >= 0.10.3,
-                       base,
-                       text,
-                       bytestring
+        main-is:        charadrius.hs
+        other-modules:  Types, Parser, Plover
+        ghc-options:    -Wall
+        build-depends:  attoparsec >= 0.10.3,
+                        base,
+                        text,
+                        bytestring
