@@ -1,0 +1,24 @@
+name:           charadrius
+version:        0.1
+homepage:       https://github.com/bergey/Charadrius/
+synopsis:       Conversion script for plover stenographic software
+description:
+        Converts stenographic dictionaries from the RTF format used by
+        most commercial software to the JSON format used by Plover.
+        
+        Usage: charadrius filename1 filename2
+        will read the two specified files and create new files in the Plover
+        format with the .json filename extension
+license:       GPL
+author:        Daniel Bergey
+maintainer:    bergey@alum.mit.edu
+cabal-version: >= 1.2.1
+build-type:    Simple
+
+executable charadrius
+        main-is: charadrius.hs
+        other-modules: Types, Parser, Plover
+        build-depends: attoparsec >= 0.10.3,
+                       base,
+                       text,
+                       bytestring
