@@ -12,6 +12,8 @@ import Data.Text.Encoding
 import qualified Data.ByteString as BS
 import Data.Char (isAlpha, isDigit, isSpace)
 import Data.Text.Encoding.Error (lenientDecode)
+import Data.Either
+import System.Environment
 
 (*>|) :: Applicative f => f a -> b -> f b
 (*>|) a b  = a *> (pure b)
@@ -48,8 +50,6 @@ notFollowedBy predicate = do
     Just  c -> case predicate c of
       True  -> empty
       False -> return ()
-
-spaces = T.pack <$> many space
 
 hiddenGroupPrefix :: Bool -> Parser ()
 hiddenGroupPrefix True = string "\\*" *> return ()
@@ -189,12 +189,27 @@ dictionaryFile = (rtfGroup False "rtf1" $
 --I think using aeson would just make this more complex
 toJSON :: [Brief] -> Text
 toJSON xs = T.concat ["{\n", T.concat $ map brief xs, "}\n"] where
-  brief (Brief stks trn) = T.concat [quoteS stks,  ": ",  T.concat $ map translation trn,  ",\n"]
+  brief (Brief stks trn) = T.concat [quoteS stks,  ": ",  T.concat $ rights $ map plover trn,  ",\n"]
   quoteS stks = T.concat ["\"", T.intercalate "/" $ map hyphenate stks,  "\""]
   hyphenate (Stroke l r) = T.concat [l,  "-",  r]  -- always inserts hyphen
-  translation (PlainText s) = T.concat ["\"",  s,  "\""]
-  translation (Fingerspell s) = T.concat ["\"{&",  s,  "\""]
-  translation (Punctuation s) = T.concat ["\"",  s,  "\""]
+  hyphenate (Junk t)     = t
+
+plover :: Translation -> Either Text Text
+plover (PlainText s) = Right $ T.concat ["\"",  s,  "\""]
+plover (Fingerspell s) = Right $ T.concat ["\"{&",  s,  "\""]
+plover (Punctuation s) = Right $ T.concat ["\"",  s,  "\""]
+plover DelSpace = Right "^" -- should check for adjacent word here?
+plover (NewPar _) = Left "skipping unsupported paragraph formatting stroke"
+plover (Automatic text) = Right text
+plover (SpecialChar NBSP) = Right " " -- These are UTF-8 chars
+plover (SpecialChar OptionalHyphen) = Right "-" --"­"
+plover (SpecialChar NBHyphen) = Right "-" -- "‑"
+plover CapNext = Right "{-|}"
+plover (CharGroup cg) = Left $ T.concat ["skipping undocumented group: ", T.singleton cg]
+plover (Stitch text) = Right text -- TODO check this with pro stenographers
+plover DelStroke = Left "Delete Stroke not yet implemented" -- TODO
+plover (Unknown text) = Left $ T.concat ["skipping: ", text]
+plover Ignored = Left ""
 
 isRight :: Either a b -> Bool
 isRight (Left _) = False
