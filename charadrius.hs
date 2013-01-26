@@ -223,10 +223,14 @@ jsonExtension fn = if isSuffixOf ".rtf" fn
 
 main :: IO ()
 main = do
-  let filename = "ploverdicts/mk-test.rtf"
+       files <- getArgs
+       mapM convertFile files
+       return ()
+
+convertFile :: String -> IO ()
+convertFile filename = do
   bs <- BS.readFile filename
   let utf = decodeUtf8With lenientDecode bs
-  case parse dictionaryFile utf of
-       (Done _ r) -> T.writeFile (jsonExtension filename) (toJSON r)
-       (Fail _ c e) -> putStrLn e
-       (Partial _) -> putStrLn "Don't know how to get more data for parser"
+  case parseOnly dictionaryFile utf of
+       (Right r) -> T.writeFile (jsonExtension filename) (toJSON r)
+       (Left e) -> putStrLn e
